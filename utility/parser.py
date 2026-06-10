@@ -15,7 +15,7 @@ def parse_args():
     parser.add_argument("--sparsity_test", type=int, default=0, help="sparsity_test")
     parser.add_argument('--dim', type=int, default=64, help='embedding size')
     parser.add_argument('--top_K', type=str, default="[20, 10, 5]", help='size of Top-K')
-    parser.add_argument('--epochs', type=int, default=60, help='number of epochs')
+    parser.add_argument('--epochs', type=int, default=100, help='number of epochs')
     parser.add_argument('--batch_size', type=int, default=4096, help='batch size')
     parser.add_argument('--test_batch_size', type=int, default=200, help='batch size')
     parser.add_argument("--verbose", type=int, default=1, help="Test interval")
@@ -25,10 +25,14 @@ def parse_args():
     # hete_hyper
     parser.add_argument("--in_size", default=64, type=int, help="Initial dimension size for entities.")
     parser.add_argument("--out_size", default=64, type=int, help="Output dimension size for entities.")
-    parser.add_argument('--enc_num_layer', type=int, default=1)
+    parser.add_argument('--enc_num_layer', type=int, default=2)
     parser.add_argument('--dec_num_layer', type=int, default=1)
     parser.add_argument('--mask_rate', type=float, default=0.1)
     parser.add_argument('--remask_rate', type=float, default=0.1)
     parser.add_argument('--num_remasking', type=int, default=1)
+    parser.add_argument('--alpha', type=float, default=0.1)
+
+    parser.add_argument('--noise', type=float, default=0)
+    #python main.py --dataset yelp --noise 0/0.05/0.10
     
     return parser.parse_args()

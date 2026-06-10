@@ -10,7 +10,7 @@ import utility.metrics
 
 
 def Test(dataset: Data, model, device, config):
-    model = model.eval()
+    model = model.eval()  # 将模型切换到评估模式（关闭 dropout、batchnorm 等）
 
     topK = eval(config.top_K)
 
@@ -19,8 +19,8 @@ def Test(dataset: Data, model, device, config):
                      'hit': np.zeros(len(topK)),
                      'ndcg': np.zeros(len(topK))}
 
-    with torch.no_grad():
-        users = list(dataset.test_dict.keys())  # get user list to test
+    with torch.no_grad():  # 评测阶段不需要梯度
+        users = list(dataset.test_dict.keys())  # get user list to test 获取需要测试的用户列表（test_dict 中的用户）
         users_list, rating_list, ground_true_list = [], [], []
         num_batch = len(users) // int(config.test_batch_size) + 1
 
@@ -31,17 +31,21 @@ def Test(dataset: Data, model, device, config):
 
             batch_users_device = torch.Tensor(batch_users).long().to(device)
 
-            rating = model.get_rating_for_test(batch_users_device)
+            rating = model.get_rating_for_test(batch_users_device)  # 模型预测：得到 [batch_size, num_items] 的评分矩阵
 
+            # 将训练集中出现过的正样本物品从推荐列表中排除
             # Positive items are excluded from the recommended list
             for i, items in enumerate(all_positive):
-                exclude_users.extend([i] * len(items))
-                exclude_items.extend(items)
+                exclude_users.extend([i] * len(items))  # 当前 batch 内的用户索引
+                exclude_items.extend(items)  # 对应需要排除的物品 id
+            exclude_users = torch.as_tensor(exclude_users, dtype=torch.long, device=rating.device)
+            exclude_items = torch.as_tensor(exclude_items, dtype=torch.long, device=rating.device)
             rating[exclude_users, exclude_items] = -1
 
             # get the top-K recommended list for all users
             _, rating_k = torch.topk(rating, k=max(topK))
 
+            # 释放显存
             rating = rating.cpu()
             del rating
 
@@ -81,7 +85,7 @@ def test_one_batch(X, topK):
 
     return {'recall': np.array(recall), 'precision': np.array(precision), 'ndcg': np.array(ndcg)}
 
-   
+
 def sparsity_test(dataset: Data, model, device, config):
     sparsity_results = []
     model = model.eval()

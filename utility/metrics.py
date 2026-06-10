@@ -53,11 +53,16 @@ def F1(pre, rec):
 
 def get_label(true_data, pred_data):
     r = []
-    for i in range(len(true_data)):
+    for i in range(len(true_data)):  # 遍历每个用户
         ground_true = true_data[i]
         pred_top_k = pred_data[i]
+
+        # 判断 Top-K 中的每个物品是否出现在 ground truth 中
+        # 如果命中则为 True，否则为 False
         pred = list(map(lambda x: x in ground_true, pred_top_k))
+
+        # 将 True / False 转为 1.0 / 0.0
         pred = np.array(pred).astype("float")
         r.append(pred)
-
+    # 返回形状为 [num_users, K] 的命中矩阵
     return np.array(r).astype("float")

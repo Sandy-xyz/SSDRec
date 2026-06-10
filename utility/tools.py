@@ -55,12 +55,18 @@ def shuffle(*arrays, **kwargs):
 def mini_batch(*tensors, **kwargs):
     batch_size = kwargs.get('batch_size', 1024)
 
+    # 如果只传入了一个 tensor
     if len(tensors) == 1:
         tensor = tensors[0]
+        # 按 batch_size 对该 tensor 进行切分
         for i in range(0, len(tensor), batch_size):
-            yield tensor[i:i + batch_size]
+            yield tensor[i:i + batch_size]  # 每次返回一个 batch
+
+    # 如果传入了多个 tensor（如 users, pos_items, neg_items）
     else:
+        # 默认认为所有 tensor 的第 0 维长度一致
         for i in range(0, len(tensors[0]), batch_size):
+            # 对每个 tensor 同步切片，保证 batch 内样本一一对应
             yield tuple(x[i:i + batch_size] for x in tensors)
 
 
@@ -92,16 +98,29 @@ def create_adj_mat(inter_graph, aug_type, ssl_rate):
 
 def convert_sp_mat_to_sp_tensor(sp_mat):
     """
-        coo.row: x in user-item graph
-        coo.col: y in user-item graph
-        coo.data: [value(x,y)]
+    将 SciPy 的稀疏矩阵转换为 PyTorch 的稀疏张量（sparse tensor）
+
+        coo.row: x in user-item graph 非零元素的行索引（在用户-物品图中对应 x 轴，如用户或节点）
+        coo.col: y in user-item graph 非零元素的列索引（在用户-物品图中对应 y 轴，如物品或节点）
+        coo.data: [value(x,y)] 每个 (row, col) 位置对应的非零取值
     """
+    # 将稀疏矩阵转换为 COO 格式，并统一转为 float32
     coo = sp_mat.tocoo().astype(np.float32)
+    # 行索引，转换为 torch 的 long 类型（索引必须是整型）
     row = torch.Tensor(coo.row).long()
 
+    # 列索引，转换为 torch 的 long 类型
     col = torch.Tensor(coo.col).long()
+
+    # 将行索引和列索引堆叠成 shape = (2, nnz) 的索引张量
+    # 第一行是 row，第二行是 col
     index = torch.stack([row, col])
+
+    # 非零元素的取值，对应每条边/连接的权重
     value = torch.FloatTensor(coo.data)
+
+    # 根据 index、value 和矩阵原始形状构造 PyTorch 稀疏张量
+    # sp_tensor 的大小为 (num_rows, num_cols)
     # from a sparse matrix to a sparse float tensor
     sp_tensor = torch.sparse.FloatTensor(index, value, torch.Size(coo.shape))
     return sp_tensor

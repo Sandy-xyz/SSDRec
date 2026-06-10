@@ -1,5 +1,7 @@
 import torch
 import time
+import random
+import numpy as np
 import utility.batch_test
 import utility.parser
 import utility.losses
@@ -9,6 +11,19 @@ from utility.data_loader import Data
 from time import time
 from model.model import GCRec
 from utility.load_hete_data import load_data
+
+
+def set_seed(seed=2024):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+set_seed(1234)
 
 
 def main():
@@ -31,7 +46,7 @@ def main():
     for epoch in range(args.epochs):
         start_time = time()
 
-        model.train()
+        model.train()  # 将模型切换到训练模式（启用 Dropout、BN 等）
         sample_data = dataset.sample_data_to_train_all()
         users = torch.Tensor(sample_data[:, 0]).long()
         pos_items = torch.Tensor(sample_data[:, 1]).long()
@@ -43,16 +58,18 @@ def main():
         num_batch = len(users) // args.batch_size + 1
         total_loss_list = []
 
+        # Mini-batch 训练
         for batch_i, (batch_users, batch_positive, batch_negative) in \
-                enumerate(utility.tools.mini_batch(users, pos_items, neg_items,
-                                                   batch_size=int(args.batch_size))):
+                enumerate(utility.tools.mini_batch(users, pos_items, neg_items, batch_size=int(args.batch_size))):
             loss_list = model(batch_users, batch_positive, batch_negative)
 
+            # 在第一个 batch 初始化损失累计列表
             if batch_i == 0:
                 assert len(loss_list) >= 1
                 total_loss_list = [0.] * len(loss_list)
 
             total_loss = 0.
+            # 累加所有损失项
             for i in range(len(loss_list)):
                 loss = loss_list[i]
                 total_loss += loss
@@ -66,10 +83,12 @@ def main():
 
         end_time = time()
 
+        # 计算平均训练损失，并格式化输出
         loss_strs = str(round(sum(total_loss_list) / num_batch, 6)) \
                     + " = " + " + ".join([str(round(i / num_batch, 6)) for i in total_loss_list])
         print("\t Epoch: %4d| train time: %.3f | train_loss: %s" % (epoch + 1, end_time - start_time, loss_strs))
 
+        # 验证 / 测试阶段
         if epoch % args.verbose == 0:
             if not args.sparsity_test:
                 result = utility.batch_test.Test(dataset, model, device, args)
@@ -79,6 +98,7 @@ def main():
 
                 print("\t Recall:", result['recall'], "NDCG:", result['ndcg'])
             else:
+                # 稀疏性测试：按用户交互稀疏程度分层评估
                 result = utility.batch_test.sparsity_test(dataset, model, device, args)
                 if result[0]['recall'][0] > best_report_recall:
                     best_report_epoch = epoch + 1
@@ -87,6 +107,9 @@ def main():
                 print("\t level_2: recall:", result[1]['recall'], ',ndcg:', result[1]['ndcg'])
                 print("\t level_3: recall:", result[2]['recall'], ',ndcg:', result[2]['ndcg'])
                 print("\t level_4: recall:", result[3]['recall'], ',ndcg:', result[3]['ndcg'])
+                ndcg_20 = [r['ndcg'][0] for r in result]
+
+                # np.save("saved/sparsity_ndcg_20_ihgcl.npy", ndcg_20)
     # vis_embedding
     # user_emb = torch.tensor(model.user_embedding.weight, dtype=torch.float32)
     # item_emb = torch.tensor(model.item_embedding.weight, dtype=torch.float32)
@@ -107,6 +130,7 @@ def main():
     # torch.save(hete_item_embedding[0], 'data/emb/dbmovie_item_noise_mam.pth')
     # torch.save(hete_item_embedding[1], 'data/emb/dbmovie_item_noise_mdm.pth')
 
+    # 训练结束日志
     print("\t Model training process completed.")
     print("\t best epoch:", best_report_epoch)
     print("\t best recall:", best_report_recall)

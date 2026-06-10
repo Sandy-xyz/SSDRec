@@ -1,5 +1,6 @@
 import scipy.sparse as sp
 import dgl
+import torch
 import numpy as np
 def load_data(dataset, device):
     if dataset == 'douban-movie':
@@ -75,14 +76,17 @@ def load_data(dataset, device):
         user_mps, item_mps = [uu_graph, ugu_graph], [bab_graph, byb_graph]  # , ulu_graph, byb_graph
 
     elif dataset == 'amazon':
+        # 加载 Amazon 数据集中预处理好的稀疏邻接矩阵（npz 格式）
+        # uibiu : User → Item → Brand → Item → User
         uibiu_graph = sp.load_npz('data/amazon/uibiu_processed.npz')
         # uiviu_graph = sp.load_npz('data/amazon/uiviu.npz')
-        uiu_graph = sp.load_npz('data/amazon/uiu_processed.npz')
-        ibi_graph = sp.load_npz('data/amazon/ibi_processed.npz')
+        uiu_graph = sp.load_npz('data/amazon/uiu_processed.npz')  # uiu : User → Item → User
+        ibi_graph = sp.load_npz('data/amazon/ibi_processed.npz')  # ibi : Item → Brand → Item
         # ivi_graph = sp.load_npz('data/amazon/ivi.npz')
         # iui_graph = sp.load_npz('data/amazon/iui.npz')
-        ici_graph = sp.load_npz('data/amazon/ici_processed.npz')
+        ici_graph = sp.load_npz('data/amazon/ici_processed.npz')  # ici : Item → Category → Item
 
+        # 将稀疏矩阵转换为 DGL Graph，并移动到指定设备（CPU / GPU）
         uibiu_graph = get_graph(uibiu_graph).to(device)
         # uiviu_graph = get_graph(uiviu_graph).to(device)
         uiu_graph = get_graph(uiu_graph).to(device)
@@ -90,6 +94,10 @@ def load_data(dataset, device):
         # ivi_graph = get_graph(ivi_graph).to(device)
         # iui_graph = get_graph(iui_graph).to(device)
         ici_graph = get_graph(ici_graph).to(device)
+
+        # 构建用户和物品的 meta-path 子图集合
+        # user_mps : 用于学习用户表示的 meta-path 图
+        # item_mps : 用于学习物品表示的 meta-path 图
         user_mps, item_mps = [uibiu_graph, uiu_graph], [ibi_graph, ici_graph]  #
 
     elif dataset == 'movielens-1m':
@@ -121,5 +129,7 @@ def load_data(dataset, device):
 def get_graph(graph):
     new_row = graph.row
     new_col = graph.col
+    new_row = torch.as_tensor(new_row, dtype=torch.long)
+    new_col = torch.as_tensor(new_col, dtype=torch.long)
     g = dgl.graph((new_row, new_col), num_nodes=graph.shape[0])
     return g
