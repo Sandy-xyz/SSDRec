@@ -44,26 +44,12 @@ class Data(object):
 
         assert len(self.train_user) == len(self.train_item)
 
-        # 构建用户-物品交互矩阵（稀疏矩阵表示）
-        # 行表示用户，列表示物品
-        # 如果用户 u 与物品 i 有交互，则 (u, i) 位置为 1
         self.user_item_net = sp.csr_matrix((np.ones(len(self.train_user)), (self.train_user, self.train_item)),
                                            shape=(self.num_users, self.num_items))
 
-        self.all_positive = self.get_user_pos_items(list(range(self.num_users)))  # 获取每个用户对应的正样本物品列表
+        self.all_positive = self.get_user_pos_items(list(range(self.num_users)))
 
-        # 构建测试集字典（通常用于评测阶段）
-        # key: 用户 ID
-        # value: 该用户在测试集中的正样本物品
         self.test_dict = self.build_test()
-
-        #add noise
-
-#         self.train_user, self.train_item = self.add_noise(0.1)
-#         self.user_item_net = sp.csr_matrix((np.ones(len(self.train_user)), (self.train_user, self.train_item)),
-#                                            shape=(self.num_users, self.num_items))
-#         self.num_train = len(self.train_user)
-#         self.data_statistics()
 
     def read_ratings(self, file_name):
         inter_users, inter_items, unique_users = [], [], []
@@ -72,31 +58,23 @@ class Data(object):
         with open(file_name, "r") as f:
             line = f.readline()
             while line is not None and line != "":
-                temp = line.strip()  # 去除首尾空白字符
-                arr = [int(i) for i in temp.split(" ")]  # 按空格切分，并转为 int
+                temp = line.strip()
+                arr = [int(i) for i in temp.split(" ")]
 
-                # arr[0] 是用户 ID，arr[1:] 是该用户对应的正样本物品 ID 列表
                 user_id, pos_id = arr[0], arr[1:]
                 unique_users.append(user_id)
 
-                # 如果该用户没有正样本物品，直接跳过
                 if len(pos_id) < 1:
                     line = f.readline()
                     continue
                 self.num_users = max(self.num_users, user_id)
                 self.num_items = max(self.num_items, max(pos_id))
-                inter_users.extend([user_id] * len(pos_id))  # 将当前用户 ID 按其正样本数量重复，加入交互用户列表
-                pos_length.append(len(pos_id))  # 记录该用户的正样本物品数量
-                inter_items.extend(pos_id)  # 将正样本物品加入交互物品列表
-                inter_num += len(pos_id)  # 更新交互总数
+                inter_users.extend([user_id] * len(pos_id))
+                pos_length.append(len(pos_id))
+                inter_items.extend(pos_id)
+                inter_num += len(pos_id)
                 line = f.readline()
 
-        # 返回：
-        # unique_users : 唯一用户 ID 列表
-        # inter_users  : 按交互展开的用户 ID 列表
-        # inter_items  : 按交互展开的物品 ID 列表
-        # inter_num    : 总交互数
-        # pos_length   : 每个用户的正样本物品数量
         return np.array(unique_users), np.array(inter_users), np.array(inter_items), inter_num, pos_length
 
     def data_statistics(self):
@@ -106,9 +84,6 @@ class Data(object):
         print("\t num_train:", self.num_train)
         print("\t num_test: ", self.num_test)
 
-        # 计算并打印数据集的稀疏度（Sparsity）
-        # 稀疏度 = 1 - (已有交互数 / 用户数 / 物品数)
-        # 反映用户-物品交互矩阵的稀疏程度
         print("\t sparisty: ", 1 - (self.num_train + self.num_test) / self.num_users / self.num_items)
 
     # random sampling from official implementation of LightGCN
@@ -134,29 +109,19 @@ class Data(object):
     def sample_data_to_train_all(self):
         sample_list = []
 
-        # 遍历训练集中所有 (user, item) 正样本交互
         for i in range(len(self.train_user)):
             user = self.train_user[i]
-
-            # 获取该用户的所有正样本物品集合（训练集中出现过的物品）
             positive_items = self.all_positive[user]
             if len(positive_items) == 0:
                 continue
-
-            positive_item = self.train_item[i]  # 当前索引 i 对应的正样本物品
-
-            # ----------------- 负采样过程 -----------------
-            # 从所有物品中随机采样一个负样本
-            # 要求该物品不在用户的正样本集合中
+            positive_item = self.train_item[i]
             while True:
                 negative_item = np.random.randint(0, self.num_items)
                 if negative_item in positive_items:
-                    # 如果采样到的是正样本，则重新采样
                     continue
-                else:  # 采样到合法负样本，跳出循环
+                else:
                     break
 
-            # 将 (user, positive_item, negative_item) 组成一个训练样本
             sample_list.append([user, positive_item, negative_item])
 
         return np.array(sample_list)
@@ -164,8 +129,6 @@ class Data(object):
     def get_user_pos_items(self, users):
         positive_items = []
         for user in users:
-            # 从用户-物品交互稀疏矩阵中取出该用户对应的一行
-            # nonzero()[1] 返回该用户有过交互的物品索引（列索引）
             positive_items.append(self.user_item_net[user].nonzero()[1])
         return positive_items
 
@@ -222,46 +185,28 @@ class Data(object):
 
     def sparse_adjacency_matrix(self):
         try:
-            # 尝试从磁盘加载已经预处理并保存好的归一化邻接矩阵
             norm_adjacency = sp.load_npz(self.path + '/pre_A.npz')
             # print("\t Adjacency matrix loading completed.")
         except:
-            # 如果不存在预处理文件，则从头构建邻接矩阵
-
-            # 初始化一个 (num_nodes × num_nodes) 的稀疏邻接矩阵
             adjacency_matrix = sp.dok_matrix((self.num_nodes, self.num_nodes), dtype=np.float32)
             adjacency_matrix = adjacency_matrix.tolil()
-
-            # 将用户-物品交互矩阵转为 DOK 格式
             R = self.user_item_net.todok()
 
-            # 构建二部图的邻接关系
-            # 左上角：用户-用户（为空）
-            # 右下角：物品-物品（为空）
-            # 右上角：用户 → 物品
             adjacency_matrix[:self.num_users, self.num_users:] = R
-            # 坐下角：物品 → 用户
             adjacency_matrix[self.num_users:, :self.num_users] = R.T
 
-            # 转换回 DOK 格式，便于后续操作
             adjacency_matrix = adjacency_matrix.todok()
 
-            # 计算每个节点的度（行求和）
             row_sum = np.array(adjacency_matrix.sum(axis=1))
-            # 计算度矩阵 D^{-1/2}
             d_inv = np.power(row_sum, -0.5).flatten()
-            # 将无穷大的值（度为 0 的节点）置为 0
             d_inv[np.isinf(d_inv)] = 0.
             degree_matrix = sp.diags(d_inv)
 
-            # 对邻接矩阵进行对称归一化：D^{-1/2} A D^{-1/2}
             norm_adjacency = degree_matrix.dot(adjacency_matrix).dot(degree_matrix).tocsr()
 
-            # 将归一化后的邻接矩阵保存到磁盘，便于下次直接加载
             sp.save_npz(self.path + '/pre_A', norm_adjacency)
             print("\t Adjacency matrix constructed.")
 
-        # 返回归一化后的稀疏邻接矩阵
         return norm_adjacency
        
     def sparse_adjacency_matrix_adjnorm(self):

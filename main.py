@@ -46,7 +46,7 @@ def main():
     for epoch in range(args.epochs):
         start_time = time()
 
-        model.train()  # 将模型切换到训练模式（启用 Dropout、BN 等）
+        model.train()
         sample_data = dataset.sample_data_to_train_all()
         users = torch.Tensor(sample_data[:, 0]).long()
         pos_items = torch.Tensor(sample_data[:, 1]).long()
@@ -58,18 +58,15 @@ def main():
         num_batch = len(users) // args.batch_size + 1
         total_loss_list = []
 
-        # Mini-batch 训练
         for batch_i, (batch_users, batch_positive, batch_negative) in \
                 enumerate(utility.tools.mini_batch(users, pos_items, neg_items, batch_size=int(args.batch_size))):
             loss_list = model(batch_users, batch_positive, batch_negative)
 
-            # 在第一个 batch 初始化损失累计列表
             if batch_i == 0:
                 assert len(loss_list) >= 1
                 total_loss_list = [0.] * len(loss_list)
 
             total_loss = 0.
-            # 累加所有损失项
             for i in range(len(loss_list)):
                 loss = loss_list[i]
                 total_loss += loss
@@ -83,12 +80,10 @@ def main():
 
         end_time = time()
 
-        # 计算平均训练损失，并格式化输出
         loss_strs = str(round(sum(total_loss_list) / num_batch, 6)) \
                     + " = " + " + ".join([str(round(i / num_batch, 6)) for i in total_loss_list])
         print("\t Epoch: %4d| train time: %.3f | train_loss: %s" % (epoch + 1, end_time - start_time, loss_strs))
 
-        # 验证 / 测试阶段
         if epoch % args.verbose == 0:
             if not args.sparsity_test:
                 result = utility.batch_test.Test(dataset, model, device, args)
@@ -98,7 +93,6 @@ def main():
 
                 print("\t Recall:", result['recall'], "NDCG:", result['ndcg'])
             else:
-                # 稀疏性测试：按用户交互稀疏程度分层评估
                 result = utility.batch_test.sparsity_test(dataset, model, device, args)
                 if result[0]['recall'][0] > best_report_recall:
                     best_report_epoch = epoch + 1
